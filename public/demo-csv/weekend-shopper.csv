@@ -1,0 +1,15 @@
+amount,category,merchant,timestamp
+680,Food Delivery,Swiggy,2026-05-01T21:10:00+05:30
+3490,Shopping,Amazon,2026-05-02T16:30:00+05:30
+2290,Shopping,Myntra,2026-05-03T18:00:00+05:30
+780,Groceries,Blinkit,2026-05-04T19:50:00+05:30
+440,Transport,Uber,2026-05-05T09:10:00+05:30
+520,Coffee,Starbucks,2026-05-06T17:15:00+05:30
+1850,Shopping,Amazon,2026-05-09T15:25:00+05:30
+2690,Shopping,Myntra,2026-05-10T19:40:00+05:30
+710,Food Delivery,Zomato,2026-05-10T22:20:00+05:30
+980,Groceries,Blinkit,2026-05-12T20:00:00+05:30
+410,Transport,Uber,2026-05-15T10:20:00+05:30
+3299,Electronics,Amazon,2026-05-16T17:30:00+05:30
+1490,Shopping,Myntra,2026-05-17T18:45:00+05:30
+590,Food Delivery,Swiggy,2026-05-20T21:55:00+05:30

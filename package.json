@@ -1,0 +1,32 @@
+{
+  "name": "digikhata",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1 --port 3000",
+    "dev:network": "next dev --hostname 0.0.0.0 --port 3000",
+    "build": "next build",
+    "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node -e \"require('fs').writeFileSync('.test-dist/package.json','{\\\"type\\\":\\\"commonjs\\\"}')\" && node .test-dist/tests/run-tests.js",
+    "verify": "npm run typecheck && npm test",
+    "lint": "npm run typecheck"
+  },
+  "dependencies": {
+    "framer-motion": "^12.12.1",
+    "lucide-react": "^0.511.0",
+    "next": "^15.3.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "recharts": "^2.15.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.7",
+    "@types/node": "^22.15.17",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.5",
+    "tailwindcss": "^4.1.7",
+    "typescript": "^5.8.3"
+  }
+}

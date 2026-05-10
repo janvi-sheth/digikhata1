@@ -1,0 +1,8 @@
+amount,category,merchant,timestamp
+540,Food Delivery,Swiggy,2026-05-01T22:40:00+05:30
+1299,Shopping,Myntra,2026-05-02T21:20:00+05:30
+320,Coffee,Starbucks,2026-05-03T18:05:00+05:30
+860,Food Delivery,Zomato,2026-05-03T23:15:00+05:30
+740,Groceries,Blinkit,2026-05-04T20:10:00+05:30
+460,Transport,Uber,2026-05-05T09:40:00+05:30
+2350,Shopping,Amazon,2026-05-05T22:25:00+05:30
