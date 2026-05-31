@@ -1,1 +1,66 @@
-[]
+[
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567801",
+    "position": 1,
+    "filepath": "src/pages/slides/Slide1Title.tsx",
+    "title": "DigiKhata",
+    "description": "Title slide — personal finance for first-time earners, auto-split salary, AI nudges",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567802",
+    "position": 2,
+    "filepath": "src/pages/slides/Slide2Problem.tsx",
+    "title": "The Problem",
+    "description": "First salaries disappear — no plan, too complex, warnings too late, no safety net",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567803",
+    "position": 3,
+    "filepath": "src/pages/slides/Slide3HowItWorks.tsx",
+    "title": "How It Works",
+    "description": "Three steps: enter salary, check purchase, log it",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567804",
+    "position": 4,
+    "filepath": "src/pages/slides/Slide4BudgetEngine.tsx",
+    "title": "Budget Engine",
+    "description": "8 auto-calculated categories from monthly salary with allocation breakdown",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567805",
+    "position": 5,
+    "filepath": "src/pages/slides/Slide5NudgeEngine.tsx",
+    "title": "AI Nudge Engine",
+    "description": "Anakin.io Wire — real-time price intel, cheaper alternatives, calm nudges",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567806",
+    "position": 6,
+    "filepath": "src/pages/slides/Slide6TechStack.tsx",
+    "title": "Tech Stack",
+    "description": "Frontend, backend, data, and AI layers — production-grade TypeScript monorepo",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567807",
+    "position": 7,
+    "filepath": "src/pages/slides/Slide7WhatWeBuilt.tsx",
+    "title": "What We Built",
+    "description": "4 pages, 3 API routes, 8 buckets, 0 mocked data — fully functional",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567808",
+    "position": 8,
+    "filepath": "src/pages/slides/Slide8WhatsNext.tsx",
+    "title": "What's Next",
+    "description": "Auth, recurring expenses, monthly reset, mobile app, bank statement import",
+    "speakerNotes": ""
+  }
+]
