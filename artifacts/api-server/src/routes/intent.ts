@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { db, usersTable } from "@workspace/db";
+import { db, usersTable, spendingLogTable } from "@workspace/db";
 import { eq } from "drizzle-orm";
 import { CheckIntentBody } from "@workspace/api-zod";
 import { computeBudget, spendingPace } from "../lib/budgetEngine.js";
@@ -30,9 +30,18 @@ router.post("/intent/check", async (req: Request, res: Response): Promise<void> 
   const now = new Date();
   const today = now.getDate();
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const spent = 0;
-  const pace = spendingPace(catBudget, spent, today, daysInMonth);
+  const logs = await db
+    .select()
+    .from(spendingLogTable)
+    .where(eq(spendingLogTable.userId, userId));
+
+  const thisMonthSpentInCategory = logs
+    .filter((l) => l.createdAt >= startOfMonth && l.category === category)
+    .reduce((sum, l) => sum + parseFloat(l.amount), 0);
+
+  const pace = spendingPace(catBudget, thisMonthSpentInCategory, today, daysInMonth);
 
   const wireResults = await orchestrate({ productName, price, category });
   const nudge = generateNudge(pace, wireResults, { productName, price });
