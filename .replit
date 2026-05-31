@@ -26,3 +26,9 @@ externalPort = 80
 [[ports]]
 localPort = 19669
 externalPort = 3000
+
+[userenv]
+
+[userenv.shared]
+ANAKIN_BASE_URL = "https://api.anakin.ai"
+DEMO_MODE = "false"
