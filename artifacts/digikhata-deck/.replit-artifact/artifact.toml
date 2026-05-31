@@ -1,0 +1,31 @@
+kind = "slides"
+previewPath = "/digikhata-deck/"
+title = "DigiKhata Demo Deck"
+version = "1.0.0"
+id = "artifacts/digikhata-deck"
+router = "path"
+
+[[integratedSkills]]
+name = "slides"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/digikhata-deck/" ]
+localPort = 21459
+
+[services.development]
+run = "pnpm --filter @workspace/digikhata-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/digikhata-deck", "run", "build" ]
+publicDir = "artifacts/digikhata-deck/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21459"
+BASE_PATH = "/digikhata-deck/"
