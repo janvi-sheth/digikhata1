@@ -1,0 +1,1104 @@
+# DigiKhata — Product Requirements Document
+**Version:** 1.0 | **Platform:** Anakin.io Hackathon | **Stack:** React + Node/Express
+
+---
+
+## 1. Product Summary
+
+DigiKhata is a proactive personal finance app for first-time earners and college students. It divides salary automatically into fixed budget buckets, tracks real-time spending, and delivers contextual nudges *before* the user overspends — using Anakin.io Wire and Universal Scraper for live price intelligence.
+
+**Core promise:** No guilt. No month-end shock. Just a quiet guide.
+
+---
+
+## 2. Budget Allocation Engine
+
+When a user saves their salary, the system auto-computes allocations:
+
+| Category       | % | Formula             |
+|----------------|---|---------------------|
+| Rent           | 25 | salary × 0.25      |
+| Savings        | 20 | salary × 0.20      |
+| Groceries      | 10 | salary × 0.10      |
+| Fun & Leisure  | 10 | salary × 0.10      |
+| Health         | 5  | salary × 0.05      |
+| Ordering In    | 5  | salary × 0.05      |
+| Shopping       | 5  | salary × 0.05      |
+| Investment     | 20 | salary × 0.20 (remainder) |
+
+**Total: 100%**
+
+```js
+// shared/budgetEngine.js
+export const ALLOCATIONS = {
+  rent:          0.25,
+  savings:       0.20,
+  groceries:     0.10,
+  fun_leisure:   0.10,
+  health:        0.05,
+  ordering_in:   0.05,
+  shopping:      0.05,
+  investment:    0.20,
+};
+
+export function computeBudget(salary) {
+  return Object.fromEntries(
+    Object.entries(ALLOCATIONS).map(([k, v]) => [k, Math.round(salary * v)])
+  );
+}
+
+export function spendingPace(budget, spent, dayOfMonth, daysInMonth) {
+  const safePace = (dayOfMonth / daysInMonth) * budget;
+  return { safePace, isOverpacing: spent > safePace, remaining: budget - spent };
+}
+```
+
+---
+
+## 3. Tech Stack
+
+```
+frontend/     React 18, Vite, Tailwind (custom tokens only)
+backend/      Node 20, Express 4, node-fetch
+shared/       budgetEngine.js (used by both)
+.env          ANAKIN_API_KEY, ANAKIN_BASE_URL, PORT, DEMO_MODE
+```
+
+---
+
+## 4. File Structure
+
+```
+digikhata/
+├── frontend/
+│   ├── src/
+│   │   ├── pages/
+│   │   │   ├── Dashboard.jsx
+│   │   │   ├── Profile.jsx
+│   │   │   ├── LogIntent.jsx
+│   │   │   └── History.jsx
+│   │   ├── components/
+│   │   │   ├── NudgeCard.jsx
+│   │   │   ├── BudgetRing.jsx
+│   │   │   ├── CategoryBar.jsx
+│   │   │   └── SalaryModal.jsx
+│   │   ├── styles/
+│   │   │   └── tokens.css
+│   │   └── main.jsx
+├── backend/
+│   ├── server.js
+│   ├── routes/
+│   │   ├── user.js
+│   │   ├── intent.js
+│   │   └── budget.js
+│   ├── engine/
+│   │   ├── wireOrchestrator.js
+│   │   ├── scraper.js
+│   │   ├── nudgeEngine.js
+│   │   └── budgetEngine.js
+│   └── middleware/
+│       └── cache.js
+├── shared/
+│   └── budgetEngine.js
+├── .env
+├── .gitignore
+└── package.json (root — runs both with concurrently)
+```
+
+---
+
+## 5. Design Tokens
+
+```css
+/* frontend/src/styles/tokens.css */
+:root {
+  --bg:           #F7F3EE;        /* warm beige */
+  --surface:      #FFFFFF;
+  --surface-2:    #F2EDE6;
+
+  --pink-light:   #FADADD;        /* pastel pink */
+  --pink-mid:     #F7B8C0;
+  --green-light:  #D4EDD4;        /* pastel green */
+  --green-mid:    #A8D5A2;
+
+  --grad-hero:    linear-gradient(135deg, #FADADD 0%, #F7F3EE 50%, #D4EDD4 100%);
+  --grad-card:    linear-gradient(160deg, #FFF0F2 0%, #F0F7F0 100%);
+
+  --text-primary: #2C2C2A;
+  --text-muted:   #7A7570;
+  --text-hint:    #A89F97;
+
+  --radius-sm:    8px;
+  --radius-md:    14px;
+  --radius-lg:    20px;
+
+  --font:         'DM Sans', sans-serif;
+}
+```
+
+---
+
+## 6. Frontend Pages
+
+### 6a. Profile Page — Salary Input + Auto-Allocation
+
+```jsx
+// frontend/src/pages/Profile.jsx
+import { useState, useEffect } from "react";
+import { computeBudget } from "../../shared/budgetEngine";
+
+const ICONS = {
+  rent: "🏠", savings: "🏦", groceries: "🥦",
+  fun_leisure: "🎉", health: "💊", ordering_in: "🛵",
+  shopping: "🛍️", investment: "📈"
+};
+
+export default function Profile() {
+  const [salary, setSalary] = useState("");
+  const [saved, setSaved] = useState(null);
+  const [budget, setBudget] = useState(null);
+  const [editing, setEditing] = useState(false);
+
+  useEffect(() => {
+    const s = localStorage.getItem("dk_salary");
+    if (s) { setSaved(Number(s)); setBudget(computeBudget(Number(s))); }
+  }, []);
+
+  function handleSave() {
+    const val = Number(salary);
+    if (!val || val < 1000) return;
+    localStorage.setItem("dk_salary", val);
+    fetch("/api/user/salary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ salary: val })
+    });
+    setSaved(val);
+    setBudget(computeBudget(val));
+    setEditing(false);
+    setSalary("");
+  }
+
+  return (
+    <div style={{ background: "var(--bg)", minHeight: "100vh", padding: "24px 16px" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 500, marginBottom: 4 }}>Your Profile</h1>
+      <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 24 }}>
+        Set your salary once. DigiKhata handles the rest.
+      </p>
+
+      {/* Salary card */}
+      <div style={{
+        background: "var(--grad-card)", border: "0.5px solid #E8DDD5",
+        borderRadius: "var(--radius-lg)", padding: "20px", marginBottom: 20
+      }}>
+        {saved && !editing ? (
+          <>
+            <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Monthly income</div>
+            <div style={{ fontSize: 32, fontWeight: 500, margin: "4px 0 12px" }}>
+              ₹{saved.toLocaleString("en-IN")}
+            </div>
+            <button onClick={() => setEditing(true)} style={btnStyle("outline")}>
+              Update salary
+            </button>
+          </>
+        ) : (
+          <>
+            <label style={{ fontSize: 13, color: "var(--text-muted)" }}>
+              {saved ? "New monthly income" : "What's your monthly income?"}
+            </label>
+            <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
+              <input
+                type="number"
+                placeholder="e.g. 35000"
+                value={salary}
+                onChange={e => setSalary(e.target.value)}
+                style={inputStyle}
+              />
+              <button onClick={handleSave} style={btnStyle("primary")}>Save</button>
+              {editing && (
+                <button onClick={() => setEditing(false)} style={btnStyle("ghost")}>Cancel</button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      {/* Auto-allocation grid */}
+      {budget && (
+        <>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>
+            Your money, automatically split:
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {Object.entries(budget).map(([key, amount]) => (
+              <AllocationCard key={key} label={key} amount={amount} salary={saved} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function AllocationCard({ label, amount, salary }) {
+  const pct = Math.round((amount / salary) * 100);
+  const nice = label.replace("_", " ");
+  return (
+    <div style={{
+      background: "var(--surface)", border: "0.5px solid #E8DDD5",
+      borderRadius: "var(--radius-md)", padding: "14px 16px"
+    }}>
+      <div style={{ fontSize: 18, marginBottom: 4 }}>{ICONS[label]}</div>
+      <div style={{ fontSize: 13, color: "var(--text-muted)", textTransform: "capitalize" }}>{nice}</div>
+      <div style={{ fontSize: 18, fontWeight: 500, margin: "2px 0" }}>
+        ₹{amount.toLocaleString("en-IN")}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--text-hint)" }}>{pct}% of income</div>
+    </div>
+  );
+}
+
+const inputStyle = {
+  flex: 1, padding: "10px 14px", borderRadius: "var(--radius-sm)",
+  border: "0.5px solid #D4C9BE", background: "var(--surface)",
+  fontSize: 15, fontFamily: "var(--font)", outline: "none"
+};
+
+function btnStyle(variant) {
+  const base = {
+    padding: "10px 18px", borderRadius: "var(--radius-sm)",
+    fontSize: 14, fontFamily: "var(--font)", cursor: "pointer", border: "none"
+  };
+  if (variant === "primary") return { ...base, background: "#2C2C2A", color: "#fff" };
+  if (variant === "outline") return { ...base, background: "transparent", border: "0.5px solid #2C2C2A", color: "#2C2C2A" };
+  return { ...base, background: "transparent", color: "var(--text-muted)" };
+}
+```
+
+### 6b. Dashboard
+
+```jsx
+// frontend/src/pages/Dashboard.jsx
+import { useState, useEffect } from "react";
+import { computeBudget, spendingPace } from "../../shared/budgetEngine";
+import CategoryBar from "../components/CategoryBar";
+import NudgeCard from "../components/NudgeCard";
+
+export default function Dashboard() {
+  const [budget, setBudget] = useState(null);
+  const [spending, setSpending] = useState({});
+  const [nudges, setNudges] = useState([]);
+
+  useEffect(() => {
+    const s = localStorage.getItem("dk_salary");
+    if (s) setBudget(computeBudget(Number(s)));
+    fetch("/api/budget/summary").then(r => r.json()).then(d => {
+      setSpending(d.spending || {});
+      setNudges(d.activeNudges || []);
+    });
+  }, []);
+
+  const today = new Date().getDate();
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+
+  return (
+    <div style={{ background: "var(--bg)", minHeight: "100vh" }}>
+      {/* Hero gradient strip */}
+      <div style={{ background: "var(--grad-hero)", padding: "32px 20px 24px" }}>
+        <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+          Day {today} of {daysInMonth}
+        </div>
+        <div style={{ fontSize: 26, fontWeight: 500, marginTop: 4 }}>
+          How's your month going?
+        </div>
+      </div>
+
+      <div style={{ padding: "20px 16px" }}>
+        {/* Active nudges */}
+        {nudges.map((n, i) => <NudgeCard key={i} nudge={n} />)}
+
+        {/* Category bars */}
+        {budget && Object.entries(budget).map(([cat, alloc]) => (
+          <CategoryBar
+            key={cat}
+            category={cat}
+            allocated={alloc}
+            spent={spending[cat] || 0}
+            pace={spendingPace(alloc, spending[cat] || 0, today, daysInMonth)}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+```
+
+### 6c. Log Intent (Purchase Check)
+
+```jsx
+// frontend/src/pages/LogIntent.jsx
+import { useState } from "react";
+
+const CATEGORIES = ["electronics","ordering_in","groceries","shopping","fun_leisure","health"];
+
+export default function LogIntent() {
+  const [form, setForm] = useState({ productName: "", price: "", category: "electronics" });
+  const [result, setResult] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  async function check() {
+    if (!form.productName || !form.price) return;
+    setLoading(true);
+    const res = await fetch("/api/intent/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(form)
+    });
+    setResult(await res.json());
+    setLoading(false);
+  }
+
+  return (
+    <div style={{ background: "var(--bg)", minHeight: "100vh", padding: "24px 16px" }}>
+      <h1 style={{ fontSize: 22, fontWeight: 500, marginBottom: 4 }}>About to buy something?</h1>
+      <p style={{ color: "var(--text-muted)", fontSize: 14, marginBottom: 24 }}>
+        Let DigiKhata check if it makes sense.
+      </p>
+
+      <input placeholder="What are you buying?" value={form.productName}
+        onChange={e => setForm({...form, productName: e.target.value})}
+        style={{ ...inputFull, marginBottom: 10 }} />
+
+      <input type="number" placeholder="Price (₹)" value={form.price}
+        onChange={e => setForm({...form, price: e.target.value})}
+        style={{ ...inputFull, marginBottom: 10 }} />
+
+      <select value={form.category}
+        onChange={e => setForm({...form, category: e.target.value})}
+        style={{ ...inputFull, marginBottom: 16 }}>
+        {CATEGORIES.map(c => <option key={c} value={c}>{c.replace("_"," ")}</option>)}
+      </select>
+
+      <button onClick={check} disabled={loading}
+        style={{ width: "100%", padding: 14, background: "#2C2C2A", color: "#fff",
+          borderRadius: "var(--radius-md)", border: "none", fontSize: 15, cursor: "pointer" }}>
+        {loading ? "Checking..." : "Check this purchase →"}
+      </button>
+
+      {result && <NudgeResult result={result} />}
+    </div>
+  );
+}
+
+function NudgeResult({ result }) {
+  const colors = {
+    safe: { bg: "#D4EDD4", border: "#A8D5A2", text: "#1A4D1A" },
+    warning: { bg: "#FFF3CD", border: "#FFD97D", text: "#5C4200" },
+    alternative: { bg: "#FADADD", border: "#F7B8C0", text: "#5C1A22" },
+  };
+  const c = colors[result.nudge?.severity] || colors.warning;
+
+  return (
+    <div style={{ marginTop: 20, background: c.bg, border: `0.5px solid ${c.border}`,
+      borderRadius: "var(--radius-lg)", padding: "20px" }}>
+      <div style={{ fontSize: 15, color: c.text, lineHeight: 1.5 }}>
+        {result.nudge?.message}
+      </div>
+      {result.alternatives?.slice(0,2).map((alt, i) => (
+        <div key={i} style={{ marginTop: 12, padding: "10px 14px", background: "rgba(255,255,255,0.6)",
+          borderRadius: "var(--radius-sm)", fontSize: 13 }}>
+          <strong>{alt.platform}</strong> — ₹{alt.price?.toLocaleString("en-IN")}
+          {alt.link && alt.link !== "#" && (
+            <a href={alt.link} target="_blank" rel="noreferrer"
+              style={{ marginLeft: 10, color: "#2C2C2A", textDecoration: "underline" }}>
+              View →
+            </a>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+const inputFull = {
+  width: "100%", boxSizing: "border-box", padding: "12px 14px",
+  borderRadius: "var(--radius-sm)", border: "0.5px solid #D4C9BE",
+  background: "#fff", fontSize: 15, fontFamily: "var(--font)"
+};
+```
+
+### 6d. NudgeCard Component
+
+```jsx
+// frontend/src/components/NudgeCard.jsx
+const SEV_STYLES = {
+  safe:        { bg: "#D4EDD4", border: "#A8D5A2" },
+  warning:     { bg: "#FFF3CD", border: "#FFD97D" },
+  alternative: { bg: "#FADADD", border: "#F7B8C0" },
+  info:        { bg: "#F7F3EE", border: "#D4C9BE" },
+};
+
+export default function NudgeCard({ nudge }) {
+  const s = SEV_STYLES[nudge.severity] || SEV_STYLES.info;
+  return (
+    <div style={{ background: s.bg, border: `0.5px solid ${s.border}`,
+      borderRadius: "var(--radius-md)", padding: "16px", marginBottom: 12 }}>
+      <div style={{ fontSize: 14, lineHeight: 1.5, color: "#2C2C2A" }}>{nudge.message}</div>
+      {nudge.action && (
+        <button style={{ marginTop: 10, fontSize: 13, background: "transparent",
+          border: "none", color: "#2C2C2A", textDecoration: "underline", cursor: "pointer",
+          padding: 0 }}>
+          {nudge.action}
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+### 6e. CategoryBar Component
+
+```jsx
+// frontend/src/components/CategoryBar.jsx
+const ICONS = {
+  rent:"🏠", savings:"🏦", groceries:"🥦", fun_leisure:"🎉",
+  health:"💊", ordering_in:"🛵", shopping:"🛍️", investment:"📈"
+};
+
+export default function CategoryBar({ category, allocated, spent, pace }) {
+  const pct = Math.min((spent / allocated) * 100, 100);
+  const overpacing = pace?.isOverpacing;
+  const barColor = pct > 90 ? "#F7B8C0" : overpacing ? "#FFD97D" : "#A8D5A2";
+
+  return (
+    <div style={{ background: "#fff", border: "0.5px solid #E8DDD5",
+      borderRadius: "var(--radius-md)", padding: "14px 16px", marginBottom: 10 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+        <span style={{ fontSize: 14 }}>
+          {ICONS[category]} {category.replace("_"," ")}
+        </span>
+        <span style={{ fontSize: 13, color: "#7A7570" }}>
+          ₹{spent.toLocaleString("en-IN")} / ₹{allocated.toLocaleString("en-IN")}
+        </span>
+      </div>
+      <div style={{ background: "#F2EDE6", borderRadius: 99, height: 6 }}>
+        <div style={{ width: `${pct}%`, background: barColor,
+          borderRadius: 99, height: 6, transition: "width 0.4s ease" }} />
+      </div>
+    </div>
+  );
+}
+```
+
+---
+
+## 7. Backend
+
+### 7a. server.js
+
+```js
+// backend/server.js
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import userRoutes from "./routes/user.js";
+import intentRoutes from "./routes/intent.js";
+import budgetRoutes from "./routes/budget.js";
+import { validateWireActions } from "./engine/wireOrchestrator.js";
+
+dotenv.config({ path: "../.env" });
+
+const app = express();
+app.use(cors({ origin: "http://localhost:5173" }));
+app.use(express.json());
+
+app.use("/api/user",   userRoutes);
+app.use("/api/intent", intentRoutes);
+app.use("/api/budget", budgetRoutes);
+
+const PORT = process.env.PORT || 3001;
+app.listen(PORT, async () => {
+  console.log(`DigiKhata backend → http://localhost:${PORT}`);
+  if (process.env.DEMO_MODE !== "true") {
+    await validateWireActions();
+  }
+});
+```
+
+### 7b. routes/user.js
+
+```js
+// backend/routes/user.js
+import { Router } from "express";
+import { computeBudget } from "../../shared/budgetEngine.js";
+
+const router = Router();
+const store = {};   // replace with DB in production
+
+router.post("/salary", (req, res) => {
+  const { salary, userId = "default" } = req.body;
+  if (!salary || salary < 500) return res.status(400).json({ error: "Invalid salary" });
+  const budget = computeBudget(salary);
+  store[userId] = { salary, budget, spending: {}, updatedAt: new Date() };
+  res.json({ salary, budget });
+});
+
+router.get("/profile", (req, res) => {
+  const { userId = "default" } = req.query;
+  res.json(store[userId] || {});
+});
+
+export default router;
+```
+
+### 7c. routes/intent.js
+
+```js
+// backend/routes/intent.js
+import { Router } from "express";
+import { orchestrate } from "../engine/wireOrchestrator.js";
+import { generateNudge } from "../engine/nudgeEngine.js";
+import { computeBudget, spendingPace } from "../../shared/budgetEngine.js";
+
+const router = Router();
+const store = {};   // same in-memory store — sync with user.js or move to shared module
+
+router.post("/check", async (req, res) => {
+  const { productName, price, category, userId = "default" } = req.body;
+  if (!productName || !price) return res.status(400).json({ error: "Missing fields" });
+
+  const user = store[userId] || { salary: 25000, spending: {} };
+  const budget = user.budget || computeBudget(user.salary);
+  const catBudget = budget[category] || budget.shopping;
+  const spent = user.spending[category] || 0;
+
+  const today = new Date().getDate();
+  const daysInMonth = new Date(new Date().getFullYear(), new Date().getMonth()+1, 0).getDate();
+  const pace = spendingPace(catBudget, spent, today, daysInMonth);
+
+  const wireResults = await orchestrate({ productName, price: Number(price), category });
+  const nudge = generateNudge(pace, wireResults, { productName, price: Number(price) });
+
+  res.json({ nudge, alternatives: wireResults.alternatives || [], budgetImpact: pace });
+});
+
+export default router;
+```
+
+### 7d. routes/budget.js
+
+```js
+// backend/routes/budget.js
+import { Router } from "express";
+const router = Router();
+const store = {};
+
+router.get("/summary", (req, res) => {
+  const { userId = "default" } = req.query;
+  const user = store[userId] || {};
+  res.json({
+    spending: user.spending || {},
+    budget:   user.budget   || {},
+    activeNudges: []
+  });
+});
+
+router.post("/log", (req, res) => {
+  const { category, amount, userId = "default" } = req.body;
+  if (!store[userId]) store[userId] = { spending: {} };
+  store[userId].spending[category] = (store[userId].spending[category] || 0) + Number(amount);
+  res.json({ ok: true, spending: store[userId].spending });
+});
+
+export default router;
+```
+
+---
+
+## 8. Anakin.io Wire Orchestrator
+
+```js
+// backend/engine/wireOrchestrator.js
+import { getCached, setCache } from "../middleware/cache.js";
+import { scrapePrice } from "./scraper.js";
+import dotenv from "dotenv";
+dotenv.config({ path: "../../.env" });
+
+const BASE = process.env.ANAKIN_BASE_URL;   // e.g. https://api.anakin.io
+const KEY  = process.env.ANAKIN_API_KEY;
+const DEMO = process.env.DEMO_MODE === "true" || !KEY;
+
+// ⚠️  Verify these action IDs in your anakin.io Wire catalogue before running
+const CATEGORY_WIRE_MAP = {
+  electronics:  ["amazon-product", "flipkart-search"],
+  shopping:     ["amazon-product", "flipkart-search"],
+  ordering_in:  ["zomato-orders",  "swiggy-orders"],
+  groceries:    ["blinkit-search", "bigbasket-search"],
+  default:      ["amazon-product", "flipkart-search"],
+};
+
+const inflight = new Map();
+
+async function wireCall(actionId, params) {
+  const cacheKey = `${actionId}:${JSON.stringify(params)}`;
+  const cached = getCached(cacheKey);
+  if (cached) return cached;
+  if (inflight.has(cacheKey)) return inflight.get(cacheKey);
+
+  const promise = fetch(`${BASE}/v1/wire/run`, {
+    method: "POST",
+    headers: { "Authorization": `Bearer ${KEY}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ action_id: actionId, params })
+  })
+    .then(r => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
+    .then(data => { setCache(cacheKey, data); inflight.delete(cacheKey); return data; })
+    .catch(err => { inflight.delete(cacheKey); throw err; });
+
+  inflight.set(cacheKey, promise);
+  return promise;
+}
+
+function parseWireResponse(actionId, data) {
+  const out = data.result || data.data || {};
+  if (actionId.includes("amazon") || actionId.includes("flipkart") || actionId.includes("blinkit")) {
+    return {
+      platform: actionId.includes("amazon") ? "Amazon"
+               : actionId.includes("flipkart") ? "Flipkart" : "Blinkit",
+      price:  parseFloat(out.price || out.current_price || 0),
+      title:  out.title || out.name || "Unknown",
+      link:   out.url   || out.link || "#",
+    };
+  }
+  if (actionId.includes("zomato") || actionId.includes("swiggy")) {
+    return {
+      platform: actionId.includes("zomato") ? "Zomato" : "Swiggy",
+      spent:  parseFloat(out.total_spent || 0),
+      orders: parseInt(out.order_count   || 0),
+    };
+  }
+  return out;
+}
+
+export async function orchestrate(intent) {
+  if (DEMO) return getDemoResults(intent);
+
+  const actions = CATEGORY_WIRE_MAP[intent.category] || CATEGORY_WIRE_MAP.default;
+  const params  = { query: intent.productName, max_price: intent.price * 1.2 };
+
+  const settled = await Promise.allSettled(
+    actions.map(id => wireCall(id, params).then(res => ({ id, res })))
+  );
+
+  let parsed = [];
+  for (const r of settled) {
+    if (r.status === "fulfilled") {
+      const p = parseWireResponse(r.value.id, r.value.res);
+      if (p) parsed.push(p);
+    } else {
+      // Wire failed — try Universal Scraper fallback
+      console.warn(`Wire ${r.reason?.message} — scraper fallback`);
+      const scraped = await scrapePrice(intent.productName, r.reason?.actionId);
+      if (scraped) parsed.push(scraped);
+    }
+  }
+
+  if (!parsed.length) return getDemoResults(intent);
+
+  const alternatives = parsed
+    .filter(p => p.price && p.price < intent.price)
+    .sort((a, b) => a.price - b.price);
+
+  return {
+    alternatives,
+    originalPrice: intent.price,
+    bestSaving: alternatives[0] ? intent.price - alternatives[0].price : 0
+  };
+}
+
+export async function validateWireActions() {
+  const ids = [...new Set(Object.values(CATEGORY_WIRE_MAP).flat())];
+  const valid = [], invalid = [];
+  await Promise.allSettled(ids.map(async id => {
+    try {
+      const r = await fetch(`${BASE}/v1/wire/run`, {
+        method: "POST",
+        headers: { "Authorization": `Bearer ${KEY}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ action_id: id, params: { query: "test" } })
+      });
+      const d = await r.json();
+      (d.error?.toLowerCase().includes("not found") ? invalid : valid).push(id);
+    } catch { invalid.push(id); }
+  }));
+  if (invalid.length) console.error("❌ Invalid Wire IDs:", invalid);
+  else console.log("✅ All Wire actions valid:", valid);
+  return { valid, invalid };
+}
+
+function getDemoResults(intent) {
+  return {
+    alternatives: [
+      { platform: "Flipkart", price: Math.round(intent.price * 0.88), title: intent.productName, link: "#" },
+      { platform: "Amazon",   price: Math.round(intent.price * 0.92), title: intent.productName, link: "#" },
+    ],
+    originalPrice: intent.price,
+    bestSaving: Math.round(intent.price * 0.12)
+  };
+}
+```
+
+---
+
+## 9. Universal Scraper Fallback
+
+```js
+// backend/engine/scraper.js
+const BASE = process.env.ANAKIN_BASE_URL;
+const KEY  = process.env.ANAKIN_API_KEY;
+
+const SCRAPE_TARGETS = {
+  "amazon-product":  q => `https://www.amazon.in/s?k=${encodeURIComponent(q)}`,
+  "flipkart-search": q => `https://www.flipkart.com/search?q=${encodeURIComponent(q)}`,
+  "blinkit-search":  q => `https://blinkit.com/s/?q=${encodeURIComponent(q)}`,
+  "zomato-orders":   ()=> `https://www.zomato.com`,
+};
+
+export async function scrapePrice(query, actionId) {
+  const buildUrl = SCRAPE_TARGETS[actionId];
+  if (!buildUrl || !BASE || !KEY) return null;
+
+  try {
+    const res = await fetch(`${BASE}/v1/scraper/run`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        url: buildUrl(query),
+        prompt: `Extract top 2 results as JSON array: [{title, price (number, INR), url}]. Numbers only for price. Return only JSON.`
+      })
+    });
+    const data = await res.json();
+    const text = data.result || data.output || "";
+    const clean = text.replace(/```json|```/g, "").trim();
+    const items = JSON.parse(clean);
+    if (!Array.isArray(items) || !items.length) return null;
+    return {
+      platform: actionId.includes("amazon") ? "Amazon"
+               : actionId.includes("flipkart") ? "Flipkart"
+               : actionId.includes("blinkit") ? "Blinkit" : "Web",
+      price: parseFloat(items[0].price),
+      title: items[0].title,
+      link:  items[0].url || "#",
+    };
+  } catch { return null; }
+}
+```
+
+---
+
+## 10. Nudge Engine
+
+```js
+// backend/engine/nudgeEngine.js
+export function generateNudge(pace, wireResults, intent) {
+  const { remaining, daysToSalary, isOverpacing } = pace;
+  const { price, productName } = intent;
+  const postPurchase = remaining - price;
+
+  // Priority 1: cheaper alternative found via Wire/Scraper
+  const cheaper = wireResults.alternatives?.[0];
+  if (cheaper && cheaper.price < price) {
+    const saving = price - cheaper.price;
+    const meals  = Math.round(saving / 150);
+    return {
+      type: "alternative", severity: "alternative",
+      message: `${productName} is ₹${cheaper.price.toLocaleString("en-IN")} on ${cheaper.platform}. You save ₹${saving.toLocaleString("en-IN")} — that's ${meals} meal${meals !== 1 ? "s" : ""}.`,
+      action: `View on ${cheaper.platform}`,
+    };
+  }
+
+  // Priority 2: payday is close
+  if (daysToSalary <= 5 && postPurchase < 500)
+    return {
+      type: "wait", severity: "warning",
+      message: `Salary in ${daysToSalary} day${daysToSalary !== 1 ? "s" : ""}. This leaves ₹${postPurchase.toLocaleString("en-IN")} for essentials. Worth waiting?`,
+      action: "Remind me on payday",
+    };
+
+  // Priority 3: overpacing
+  if (isOverpacing && postPurchase < 1000)
+    return {
+      type: "cooloff", severity: "warning",
+      message: `You're spending faster than your plan this month. Give it 2 hours — if you still want it, go for it.`,
+      action: "Set a reminder",
+    };
+
+  // Priority 4: all good
+  if (postPurchase > 2000)
+    return {
+      type: "safe", severity: "safe",
+      message: `You'll have ₹${postPurchase.toLocaleString("en-IN")} left after this. You're on track — go for it.`,
+      action: "Proceed",
+    };
+
+  return {
+    type: "info", severity: "info",
+    message: `₹${price.toLocaleString("en-IN")} now. At this rate, that's ₹${(price * 12).toLocaleString("en-IN")}/year on ${productName}.`,
+    action: "Still want it?",
+  };
+}
+```
+
+---
+
+## 11. Cache Middleware
+
+```js
+// backend/middleware/cache.js
+const cache = new Map();
+const TTL = 5 * 60 * 1000;   // 5 minutes — Wire data doesn't need to be fresher
+
+export function getCached(key) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.ts > TTL) { cache.delete(key); return null; }
+  return entry.data;
+}
+
+export function setCache(key, data) {
+  cache.set(key, { data, ts: Date.now() });
+}
+```
+
+---
+
+## 12. Shared Budget Engine
+
+```js
+// shared/budgetEngine.js  — imported by both frontend and backend
+export const ALLOCATIONS = {
+  rent:         0.25,
+  savings:      0.20,
+  groceries:    0.10,
+  fun_leisure:  0.10,
+  health:       0.05,
+  ordering_in:  0.05,
+  shopping:     0.05,
+  investment:   0.20,
+};
+
+export function computeBudget(salary) {
+  return Object.fromEntries(
+    Object.entries(ALLOCATIONS).map(([k, v]) => [k, Math.round(salary * v)])
+  );
+}
+
+export function spendingPace(catBudget, spent, dayOfMonth, daysInMonth) {
+  const safePace   = (dayOfMonth / daysInMonth) * catBudget;
+  const remaining  = catBudget - spent;
+  const daysLeft   = daysInMonth - dayOfMonth;
+  return {
+    safePace,
+    remaining,
+    daysToSalary: daysLeft,
+    isOverpacing: spent > safePace,
+    dailyBudgetLeft: daysLeft > 0 ? remaining / daysLeft : 0,
+  };
+}
+```
+
+---
+
+## 13. Configuration Files
+
+### .env (project root)
+```
+DEMO_MODE=false
+ANAKIN_API_KEY=ak-your-key-here
+ANAKIN_BASE_URL=https://api.anakin.io
+PORT=3001
+```
+
+### .gitignore
+```
+.env
+node_modules/
+dist/
+```
+
+### package.json (root)
+```json
+{
+  "name": "digikhata",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently \"cd backend && node server.js\" \"cd frontend && npm run dev\"",
+    "install:all": "cd frontend && npm i && cd ../backend && npm i"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.0"
+  }
+}
+```
+
+### backend/package.json
+```json
+{
+  "name": "digikhata-backend",
+  "type": "module",
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "node-fetch": "^3.3.2"
+  }
+}
+```
+
+### frontend/package.json
+```json
+{
+  "name": "digikhata-frontend",
+  "type": "module",
+  "scripts": { "dev": "vite", "build": "vite build" },
+  "dependencies": { "react": "^18.2.0", "react-dom": "^18.2.0" },
+  "devDependencies": { "vite": "^5.0.0", "@vitejs/plugin-react": "^4.2.0" }
+}
+```
+
+### frontend/vite.config.js
+```js
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+export default defineConfig({
+  plugins: [react()],
+  server: { proxy: { "/api": "http://localhost:3001" } }
+});
+```
+
+### frontend/index.html
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DigiKhata</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&display=swap" rel="stylesheet" />
+</head>
+<body style="margin:0; font-family:'DM Sans',sans-serif; background:#F7F3EE">
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
+```
+
+### frontend/src/main.jsx
+```jsx
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter, Routes, Route, NavLink } from "react-router-dom";
+import Dashboard  from "./pages/Dashboard.jsx";
+import Profile    from "./pages/Profile.jsx";
+import LogIntent  from "./pages/LogIntent.jsx";
+import "./styles/tokens.css";
+
+function Nav() {
+  const s = { textDecoration:"none", color:"var(--text-muted)", fontSize:13, padding:"6px 14px",
+               borderRadius:20, display:"block" };
+  const a = { ...s, background:"var(--pink-light)", color:"var(--text-primary)" };
+  return (
+    <nav style={{ position:"fixed", bottom:0, left:0, right:0, background:"var(--surface)",
+      borderTop:"0.5px solid #E8DDD5", display:"flex", justifyContent:"space-around",
+      padding:"10px 0 20px", zIndex:100 }}>
+      <NavLink to="/"        style={({isActive})=> isActive ? a : s}>Home</NavLink>
+      <NavLink to="/check"   style={({isActive})=> isActive ? a : s}>Check</NavLink>
+      <NavLink to="/profile" style={({isActive})=> isActive ? a : s}>Profile</NavLink>
+    </nav>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <BrowserRouter>
+    <div style={{ paddingBottom: 80 }}>
+      <Routes>
+        <Route path="/"        element={<Dashboard />} />
+        <Route path="/check"   element={<LogIntent />} />
+        <Route path="/profile" element={<Profile />} />
+      </Routes>
+    </div>
+    <Nav />
+  </BrowserRouter>
+);
+```
+
+---
+
+## 14. Run the Project
+
+```bash
+# 1. Clone / create project root
+mkdir digikhata && cd digikhata
+
+# 2. Create .env at root with your keys (see Section 13)
+
+# 3. Install all dependencies
+npm run install:all
+
+# 4. Start both servers
+npm run dev
+
+# Frontend → http://localhost:5173
+# Backend  → http://localhost:3001
+```
+
+---
+
+## 15. Anakin.io Wire — Action ID Discovery
+
+Before first run, verify your action IDs:
+
+```bash
+# backend/discoverWires.js — run once
+node discoverWires.js
+```
+
+```js
+// backend/discoverWires.js
+import dotenv from "dotenv";
+dotenv.config({ path: "../.env" });
+
+const BASE = process.env.ANAKIN_BASE_URL;
+const KEY  = process.env.ANAKIN_API_KEY;
+
+for (const path of ["/v1/wire/actions","/v1/wire/list","/v1/wires"]) {
+  const r = await fetch(`${BASE}${path}`, { headers:{ Authorization:`Bearer ${KEY}` }});
+  if (r.ok) { console.log(`✅ ${path}`); console.log(await r.json()); break; }
+  else console.log(`❌ ${path} → ${r.status}`);
+}
+```
+
+Update `CATEGORY_WIRE_MAP` in `wireOrchestrator.js` with the exact IDs the catalogue returns.
+
+---
+
+## 16. Hackathon Demo Script (2 minutes)
+
+```
+1. Open Profile → type salary 30000 → Save
+   → Show auto-split cards animate in
+
+2. Open Check → type "Sony headphones 1999 electronics" → Check
+   → Show Wire fetching live price
+   → Nudge: "Same item ₹1499 on Flipkart. Save ₹500 = 3 meals."
+
+3. Open Dashboard → show category bars, spending pace
+
+4. Tell judges:
+   "Wire for live price comparison.
+    Universal Scraper as fallback — no stale data, ever.
+    No guilt, just guidance."
+```
+
+---
+
+*DigiKhata v1.0 — Built for Anakin.io Hackathon*

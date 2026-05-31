@@ -3,20 +3,25 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: DigiKhata personal finance API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: user
+    description: User profile and salary
+  - name: budget
+    description: Budget tracking
+  - name: intent
+    description: Purchase intent analysis
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +29,234 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /user/salary:
+    post:
+      operationId: saveSalary
+      tags: [user]
+      summary: Save or update monthly salary
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SalaryInput"
+      responses:
+        "200":
+          description: Salary saved with auto-computed budget
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+        "400":
+          description: Invalid salary
+
+  /user/profile:
+    get:
+      operationId: getUserProfile
+      tags: [user]
+      summary: Get user profile with salary and budget allocations
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserProfile"
+
+  /budget/summary:
+    get:
+      operationId: getBudgetSummary
+      tags: [budget]
+      summary: Get current month budget summary with spending per category
+      responses:
+        "200":
+          description: Budget summary
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BudgetSummary"
+
+  /budget/log:
+    post:
+      operationId: logSpending
+      tags: [budget]
+      summary: Log actual spending in a category
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SpendingEntry"
+      responses:
+        "200":
+          description: Updated spending totals
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SpendingMap"
+
+  /budget/history:
+    get:
+      operationId: getSpendingHistory
+      tags: [budget]
+      summary: Get spending history entries
+      responses:
+        "200":
+          description: List of spending history items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/SpendingHistoryItem"
+
+  /intent/check:
+    post:
+      operationId: checkIntent
+      tags: [intent]
+      summary: Check a purchase intent — returns nudge and price alternatives
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IntentInput"
+      responses:
+        "200":
+          description: Nudge analysis result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/IntentResult"
+        "400":
+          description: Missing required fields
+
 components:
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    SalaryInput:
+      type: object
+      required: [salary]
+      properties:
+        salary:
+          type: number
+          minimum: 500
+
+    BudgetAllocation:
+      type: object
+      required: [rent, savings, groceries, fun_leisure, health, ordering_in, shopping, investment]
+      properties:
+        rent:        { type: number }
+        savings:     { type: number }
+        groceries:   { type: number }
+        fun_leisure: { type: number }
+        health:      { type: number }
+        ordering_in: { type: number }
+        shopping:    { type: number }
+        investment:  { type: number }
+
+    UserProfile:
+      type: object
+      required: [salary, budget]
+      properties:
+        salary:
+          type: number
+        budget:
+          $ref: "#/components/schemas/BudgetAllocation"
+
+    SpendingMap:
+      type: object
+      required: [spending]
+      properties:
+        spending:
+          $ref: "#/components/schemas/BudgetAllocation"
+
+    Nudge:
+      type: object
+      required: [type, severity, message]
+      properties:
+        type:     { type: string }
+        severity: { type: string }
+        message:  { type: string }
+        action:   { type: ["string", "null"] }
+
+    PriceAlternative:
+      type: object
+      required: [platform, price]
+      properties:
+        platform: { type: string }
+        price:    { type: number }
+        title:    { type: ["string", "null"] }
+        link:     { type: ["string", "null"] }
+
+    BudgetSummary:
+      type: object
+      required: [spending, budget, activeNudges]
+      properties:
+        spending:
+          $ref: "#/components/schemas/BudgetAllocation"
+        budget:
+          $ref: "#/components/schemas/BudgetAllocation"
+        salary:
+          type: ["number", "null"]
+        activeNudges:
+          type: array
+          items:
+            $ref: "#/components/schemas/Nudge"
+
+    SpendingEntry:
+      type: object
+      required: [category, amount]
+      properties:
+        category:
+          type: string
+        amount:
+          type: number
+          minimum: 0
+        note:
+          type: ["string", "null"]
+
+    SpendingHistoryItem:
+      type: object
+      required: [id, category, amount, createdAt]
+      properties:
+        id:        { type: integer }
+        category:  { type: string }
+        amount:    { type: number }
+        note:      { type: ["string", "null"] }
+        createdAt: { type: string }
+
+    IntentInput:
+      type: object
+      required: [productName, price, category]
+      properties:
+        productName: { type: string }
+        price:       { type: number }
+        category:    { type: string }
+
+    IntentResult:
+      type: object
+      required: [nudge, budgetImpact]
+      properties:
+        nudge:
+          $ref: "#/components/schemas/Nudge"
+        alternatives:
+          type: array
+          items:
+            $ref: "#/components/schemas/PriceAlternative"
+        budgetImpact:
+          type: object
+          required: [remaining, isOverpacing, safePace, daysToSalary, dailyBudgetLeft]
+          properties:
+            remaining:       { type: number }
+            isOverpacing:    { type: boolean }
+            safePace:        { type: number }
+            daysToSalary:    { type: integer }
+            dailyBudgetLeft: { type: number }

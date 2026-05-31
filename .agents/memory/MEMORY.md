@@ -1,0 +1,1 @@
+- [DigiKhata build notes](digikhata-build.md) — Anakin.io key not yet set; DEMO_MODE auto-fallback in wireOrchestrator when key absent.

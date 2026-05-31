@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "DigiKhata"
+version = "1.0.0"
+id = "artifacts/digikhata"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19669
+
+[services.development]
+run = "pnpm --filter @workspace/digikhata run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/digikhata", "run", "build" ]
+publicDir = "artifacts/digikhata/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19669"
+BASE_PATH = "/"
