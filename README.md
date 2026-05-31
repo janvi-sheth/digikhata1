@@ -47,6 +47,7 @@ digikhata/
 │   ├── api-client-react/     # Generated React Query hooks (from codegen)
 │   ├── api-zod/              # Generated Zod validation schemas (from codegen)
 │   └── db/                   # Drizzle ORM schema & migrations
+├── vercel.json               # Vercel deployment config (frontend)
 └── pnpm-workspace.yaml
 ```
 
@@ -83,7 +84,7 @@ DATABASE_URL=postgres://user:password@localhost:5432/digikhata
 
 # Optional — Anakin.io for live price intelligence
 ANAKIN_API_KEY=ak-your-key-here
-ANAKIN_BASE_URL=https://api.anakin.io
+ANAKIN_BASE_URL=https://api.anakin.ai
 
 # Set to "true" to use mock price data (no API key needed)
 DEMO_MODE=false
@@ -100,12 +101,87 @@ pnpm --filter @workspace/db run push
 ### 5. Start the servers
 
 ```bash
-# API server (port 5000)
+# API server (port 8080)
 pnpm --filter @workspace/api-server run dev
 
 # Frontend (separate terminal)
 pnpm --filter @workspace/digikhata run dev
 ```
+
+---
+
+## Sharing on GitHub
+
+### First-time setup
+
+```bash
+# 1. Create a new repo on github.com, then:
+git init
+git add .
+git commit -m "feat: initial DigiKhata commit"
+git branch -M main
+git remote add origin https://github.com/YOUR_USERNAME/digikhata.git
+git push -u origin main
+```
+
+### What's gitignored
+
+The `.gitignore` already excludes:
+- `.env` — never commit secrets
+- `node_modules/`
+- `dist/` build outputs
+- `lib/api-client-react/src/generated/` and `lib/api-zod/src/generated/` — regenerated from the spec
+
+Anyone who clones the repo runs `pnpm install` then `pnpm --filter @workspace/api-spec run codegen` to regenerate those files.
+
+---
+
+## Deploying to Vercel
+
+DigiKhata uses a **split deployment** model:
+- **Frontend** → Vercel (static build, fast CDN)
+- **API + Database** → Replit (persistent Node server + Postgres)
+
+### Step 1 — Deploy the API on Replit
+
+Click **Deploy** inside Replit to publish the API server. Once deployed, copy your production URL (e.g. `https://digikhata.YOUR_USERNAME.repl.co`).
+
+### Step 2 — Update `vercel.json` with your API URL
+
+Edit `vercel.json` in the repo root — replace the placeholder with your Replit API URL:
+
+```json
+{
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://YOUR-REPLIT-API-URL/api/:path*"
+    }
+  ]
+}
+```
+
+Commit and push this change.
+
+### Step 3 — Import the repo on Vercel
+
+1. Go to [vercel.com/new](https://vercel.com/new) and import your GitHub repo
+2. Set the following in the Vercel project settings:
+
+| Setting | Value |
+|---|---|
+| Framework Preset | Other |
+| Build Command | `pnpm install && pnpm --filter @workspace/api-spec run codegen && pnpm --filter @workspace/digikhata run build` |
+| Output Directory | `artifacts/digikhata/dist` |
+| Install Command | `pnpm install` |
+| Node.js Version | 20.x |
+
+3. No environment variables are needed on Vercel (the frontend has no secrets — all sensitive keys live on the API server)
+4. Click **Deploy**
+
+### Step 4 — Done
+
+Your frontend is live on Vercel's CDN and all `/api/*` requests are proxied to your Replit backend.
 
 ---
 
@@ -171,12 +247,6 @@ pnpm --filter @workspace/api-spec run codegen
 This regenerates:
 - `lib/api-client-react/src/generated/` — React Query hooks
 - `lib/api-zod/src/generated/` — Zod validation schemas
-
----
-
-## Deploying
-
-This project is optimized for [Replit](https://replit.com). Click **Deploy** in the Replit UI — it handles TLS, health checks, and the production database schema migration automatically.
 
 ---
 
